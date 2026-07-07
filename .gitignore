@@ -1,0 +1,30 @@
+# Ambientes Virtuais
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Arquivos de Configuração e Segredos
+.env
+cookies.txt
+
+# Diretórios de Dados e Logs
+downloads/
+logs/
+
+# Arquivos Temporários
+temp_video.m3u8
+vps_bot_run.log
+*.log
+
+# IDEs
+.idea/
+.vscode/
+
+# Node.js
+node_modules/
+dist/
+build/
+
+# AI and Outros
+.gemini/
