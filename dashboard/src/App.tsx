@@ -15,7 +15,10 @@ import {
   ShieldCheck,
   Save,
   Cpu,
-  FileText
+  FileText,
+  ScrollText,
+  Trash2,
+  Download
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -38,6 +41,10 @@ function App() {
   const [globalList, setGlobalList] = useState('');
   const [isSavingList, setIsSavingList] = useState(false);
   const [listMessage, setListMessage] = useState('');
+  const [selectedLogSystem, setSelectedLogSystem] = useState('iqiyi');
+  const [selectedLogType, setSelectedLogType] = useState('discovery');
+  const [fullLogContent, setFullLogContent] = useState('');
+  const [isLoadingFullLog, setIsLoadingFullLog] = useState(false);
   
   // Analytics State
   const [analytics, setAnalytics] = useState({
@@ -169,6 +176,45 @@ function App() {
     }
   }, [activeTab, isAuthenticated]);
 
+  const fetchFullLog = async () => {
+    setIsLoadingFullLog(true);
+    try {
+      const res = await axios.get(`${LOCAL_API}/logs/${selectedLogSystem}/${selectedLogType}`);
+      setFullLogContent(res.data.content);
+    } catch (err) {
+      setFullLogContent('Erro ao buscar o log. A Local API está rodando?');
+    } finally {
+      setIsLoadingFullLog(false);
+    }
+  };
+
+  const clearFullLog = async () => {
+    if (!window.confirm('Tem certeza que deseja apagar o histórico de log selecionado?')) return;
+    try {
+      await axios.delete(`${LOCAL_API}/logs/${selectedLogSystem}/${selectedLogType}`);
+      fetchFullLog();
+    } catch (err) {
+      alert('Erro ao limpar os logs.');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchFullLog();
+    }
+  }, [activeTab, selectedLogSystem, selectedLogType]);
+
+  const downloadFullLog = () => {
+    const blob = new Blob([fullLogContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedLogSystem}_${selectedLogType}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const toggleAutomation = async (system: string, type: string, isRunning: boolean) => {
     try {
       const endpoint = isRunning ? 'stop' : 'start';
@@ -260,6 +306,14 @@ function App() {
           >
             <Cpu size={20} />
             <span>Automação Local</span>
+          </button>
+
+          <button 
+            className={`nav-item ${activeTab === 'logs' ? 'active' : ''}`}
+            onClick={() => setActiveTab('logs')}
+          >
+            <ScrollText size={20} />
+            <span>Central de Logs</span>
           </button>
 
           <button 
@@ -676,6 +730,64 @@ Cutie Pie
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="logs-content animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="glass-panel" style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ padding: '16px', background: 'rgba(234, 179, 8, 0.1)', borderRadius: '16px', color: 'var(--warning-color)' }}>
+                  <ScrollText size={32} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>Central de Logs (Arquivos)</h2>
+                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Visualize e baixe o histórico completo das automações que rodaram na máquina.</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                <select 
+                  value={selectedLogSystem} 
+                  onChange={(e) => setSelectedLogSystem(e.target.value)}
+                  style={{ padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#0f172a', color: '#fff' }}
+                >
+                  <option value="iqiyi">Sistema: iQIYI</option>
+                  <option value="gagaoolala">Sistema: Gagaoolala</option>
+                </select>
+                <select 
+                  value={selectedLogType} 
+                  onChange={(e) => setSelectedLogType(e.target.value)}
+                  style={{ padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#0f172a', color: '#fff' }}
+                >
+                  <option value="discovery">Tipo: Motor de Descoberta (Busca)</option>
+                  <option value="scraper">Tipo: Motor de Download (Scraper)</option>
+                </select>
+                <button 
+                  className="primary-btn" 
+                  onClick={fetchFullLog}
+                  style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}
+                >
+                  {isLoadingFullLog ? <Loader className="spin" size={18} /> : 'Atualizar Log'}
+                </button>
+                <button 
+                  onClick={downloadFullLog}
+                  style={{ padding: '12px 16px', borderRadius: '8px', background: 'var(--accent-color)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Download size={18} /> Baixar .txt
+                </button>
+                <button 
+                  onClick={clearFullLog}
+                  style={{ padding: '12px 16px', borderRadius: '8px', background: 'var(--danger-color)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Trash2 size={18} /> Limpar
+                </button>
+              </div>
+
+              <div style={{ background: '#0f172a', borderRadius: '8px', padding: '16px', border: '1px solid #1e293b', height: '500px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', color: '#cbd5e1', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {fullLogContent}
               </div>
             </div>
           </div>

@@ -20,13 +20,23 @@ const processLogs = {
     iqiyi: { scraper: [], discovery: [] }
 };
 
+const logsDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir);
+}
+
 function addLog(system, type, category, message) {
     const timestamp = new Date().toLocaleTimeString();
     const logLine = `[${timestamp}] [${category}] ${message.trim()}`;
+    
     processLogs[system][type].push(logLine);
     if (processLogs[system][type].length > 100) {
         processLogs[system][type].shift();
     }
+    
+    // File persistence
+    const logFilePath = path.join(logsDir, `${system}_${type}.log`);
+    fs.appendFileSync(logFilePath, logLine + '\n', 'utf-8');
 }
 
 const config = {
@@ -136,6 +146,42 @@ app.post('/api/automation/stop/:system/:type', (req, res) => {
         addLog(system, type, 'INFO', 'Enviando sinal de parada...');
         processes[system][type].kill();
         res.json({ success: true, message: `${system} ${type} sinalizado para parar` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+app.get('/api/automation/logs/:system/:type', (req, res) => {
+    const { system, type } = req.params;
+    const logFilePath = path.join(__dirname, 'logs', `${system}_${type}.log`);
+    try {
+        if (fs.existsSync(logFilePath)) {
+            // Para não quebrar o navegador, enviamos as últimas 5000 linhas se for gigante
+            const content = fs.readFileSync(logFilePath, 'utf-8');
+            const lines = content.split('\n');
+            if (lines.length > 5000) {
+                res.json({ success: true, content: lines.slice(-5000).join('\n') + '\n\n[Aviso: O log completo é muito grande, mostrando as últimas 5000 linhas. Use o painel na VPS para baixar.]' });
+            } else {
+                res.json({ success: true, content });
+            }
+        } else {
+            res.json({ success: true, content: 'Sem registros de log ainda.' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/automation/logs/:system/:type', (req, res) => {
+    const { system, type } = req.params;
+    const logFilePath = path.join(__dirname, 'logs', `${system}_${type}.log`);
+    try {
+        if (fs.existsSync(logFilePath)) {
+            fs.writeFileSync(logFilePath, '', 'utf-8');
+        }
+        processLogs[system][type] = [];
+        res.json({ success: true, message: 'Logs limpados com sucesso' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
