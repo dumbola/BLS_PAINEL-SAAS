@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   Save,
   Cpu,
-  Terminal,
   Play,
   Square
 } from 'lucide-react';
