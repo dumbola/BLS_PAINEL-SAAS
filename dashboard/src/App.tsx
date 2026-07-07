@@ -13,7 +13,11 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Save
+  Save,
+  Cpu,
+  Terminal,
+  Play,
+  Square
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -26,6 +30,13 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Automation State
+  const LOCAL_API = 'http://localhost:4001/api/automation';
+  const [automationStatus, setAutomationStatus] = useState<any>({
+    gagaoolala: { running: false, logs: [] },
+    iqiyi: { running: false, logs: [] }
+  });
   
   // Analytics State
   const [analytics, setAnalytics] = useState({
@@ -118,6 +129,35 @@ function App() {
     }
   }, [activeTab]);
 
+  const fetchAutomation = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await axios.get(`${LOCAL_API}/status`);
+      setAutomationStatus(res.data);
+    } catch (err) {
+      // Silently fail if local api is offline
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'automation') {
+      fetchAutomation();
+      const interval = setInterval(fetchAutomation, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, isAuthenticated]);
+
+  const toggleAutomation = async (system: string, isRunning: boolean) => {
+    try {
+      const endpoint = isRunning ? 'stop' : 'start';
+      await axios.post(`${LOCAL_API}/${endpoint}/${system}`);
+      fetchAutomation();
+    } catch (err) {
+      console.error(`Failed to toggle ${system}`, err);
+      alert(`Erro ao ${isRunning ? 'parar' : 'iniciar'} ${system}. Verifique se a Local API está rodando.`);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
@@ -193,6 +233,14 @@ function App() {
           </button>
 
           <button 
+            className={`nav-item ${activeTab === 'automation' ? 'active' : ''}`}
+            onClick={() => setActiveTab('automation')}
+          >
+            <Cpu size={20} />
+            <span>Automação Local</span>
+          </button>
+
+          <button 
             className={`nav-item ${activeTab === 'backup' ? 'active' : ''}`}
             onClick={() => setActiveTab('backup')}
           >
@@ -216,6 +264,7 @@ function App() {
           <h1>
             {activeTab === 'dashboard' && 'Visão Geral do Sistema'}
             {activeTab === 'series' && 'Gerenciamento de Séries'}
+            {activeTab === 'automation' && 'Automação (Scrapers)'}
             {activeTab === 'backup' && 'Espelhamento e Segurança'}
             {activeTab === 'settings' && 'Configurações'}
           </h1>
@@ -462,6 +511,96 @@ function App() {
                 <li>Não fica com marca d'água de "Encaminhado de".</li>
                 <li>Garante preservação de 100% da qualidade original do vídeo.</li>
               </ul>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'automation' && (
+          <div className="automation-content animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="glass-panel" style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '16px', color: '#38bdf8' }}>
+                  <Cpu size={32} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>Controle de Scrapers</h2>
+                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Gerencie os robôs de download locais (iQIYI e Gagaoolala).</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                {/* iQIYI Card */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem' }}>iQIYI System</h3>
+                    <span style={{ 
+                      padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 600,
+                      background: automationStatus.iqiyi.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)',
+                      color: automationStatus.iqiyi.running ? 'var(--success-color)' : 'var(--text-secondary)'
+                    }}>
+                      {automationStatus.iqiyi.running ? 'Rodando' : 'Parado'}
+                    </span>
+                  </div>
+                  
+                  <div style={{ flex: 1, background: '#0f172a', borderRadius: '8px', padding: '12px', border: '1px solid #1e293b', marginBottom: '16px', height: '200px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', display: 'flex', flexDirection: 'column-reverse' }}>
+                    <div>
+                      {automationStatus.iqiyi.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs disponíveis...</span> :
+                        automationStatus.iqiyi.logs.map((log: string, i: number) => (
+                          <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1', marginBottom: '4px', wordBreak: 'break-all' }}>{log}</div>
+                        ))
+                      }
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => toggleAutomation('iqiyi', automationStatus.iqiyi.running)}
+                    style={{
+                      padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      background: automationStatus.iqiyi.running ? 'var(--danger-color)' : 'var(--success-color)',
+                      color: '#fff', transition: 'all 0.2s'
+                    }}
+                  >
+                    {automationStatus.iqiyi.running ? <><Square size={18} /> Parar Scraper</> : <><Play size={18} /> Iniciar Scraper</>}
+                  </button>
+                </div>
+
+                {/* Gagaoolala Card */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Gagaoolala System</h3>
+                    <span style={{ 
+                      padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 600,
+                      background: automationStatus.gagaoolala.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)',
+                      color: automationStatus.gagaoolala.running ? 'var(--success-color)' : 'var(--text-secondary)'
+                    }}>
+                      {automationStatus.gagaoolala.running ? 'Rodando' : 'Parado'}
+                    </span>
+                  </div>
+                  
+                  <div style={{ flex: 1, background: '#0f172a', borderRadius: '8px', padding: '12px', border: '1px solid #1e293b', marginBottom: '16px', height: '200px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', display: 'flex', flexDirection: 'column-reverse' }}>
+                    <div>
+                      {automationStatus.gagaoolala.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs disponíveis...</span> :
+                        automationStatus.gagaoolala.logs.map((log: string, i: number) => (
+                          <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1', marginBottom: '4px', wordBreak: 'break-all' }}>{log}</div>
+                        ))
+                      }
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => toggleAutomation('gagaoolala', automationStatus.gagaoolala.running)}
+                    style={{
+                      padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      background: automationStatus.gagaoolala.running ? 'var(--danger-color)' : 'var(--success-color)',
+                      color: '#fff', transition: 'all 0.2s'
+                    }}
+                  >
+                    {automationStatus.gagaoolala.running ? <><Square size={18} /> Parar Scraper</> : <><Play size={18} /> Iniciar Scraper</>}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
