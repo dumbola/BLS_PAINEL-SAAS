@@ -15,8 +15,7 @@ import {
   ShieldCheck,
   Save,
   Cpu,
-  Play,
-  Square
+  FileText
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -33,9 +32,12 @@ function App() {
   // Automation State
   const LOCAL_API = 'http://localhost:4001/api/automation';
   const [automationStatus, setAutomationStatus] = useState<any>({
-    gagaoolala: { running: false, logs: [] },
-    iqiyi: { running: false, logs: [] }
+    gagaoolala: { scraper: { running: false, logs: [] }, discovery: { running: false, logs: [] } },
+    iqiyi: { scraper: { running: false, logs: [] }, discovery: { running: false, logs: [] } }
   });
+  const [globalList, setGlobalList] = useState('');
+  const [isSavingList, setIsSavingList] = useState(false);
+  const [listMessage, setListMessage] = useState('');
   
   // Analytics State
   const [analytics, setAnalytics] = useState({
@@ -133,27 +135,48 @@ function App() {
     try {
       const res = await axios.get(`${LOCAL_API}/status`);
       setAutomationStatus(res.data);
+    } catch (err) {}
+  };
+
+  const fetchGlobalList = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await axios.get(`${LOCAL_API}/list`);
+      if (res.data.success) setGlobalList(res.data.content);
+    } catch (err) {}
+  };
+
+  const saveGlobalList = async () => {
+    setIsSavingList(true);
+    setListMessage('');
+    try {
+      await axios.post(`${LOCAL_API}/list`, { content: globalList });
+      setListMessage('Lista sincronizada com sucesso nos 2 robôs!');
+      setTimeout(() => setListMessage(''), 3000);
     } catch (err) {
-      // Silently fail if local api is offline
+      setListMessage('Erro ao salvar a lista.');
+    } finally {
+      setIsSavingList(false);
     }
   };
 
   useEffect(() => {
     if (activeTab === 'automation') {
       fetchAutomation();
+      fetchGlobalList();
       const interval = setInterval(fetchAutomation, 2000);
       return () => clearInterval(interval);
     }
   }, [activeTab, isAuthenticated]);
 
-  const toggleAutomation = async (system: string, isRunning: boolean) => {
+  const toggleAutomation = async (system: string, type: string, isRunning: boolean) => {
     try {
       const endpoint = isRunning ? 'stop' : 'start';
-      await axios.post(`${LOCAL_API}/${endpoint}/${system}`);
+      await axios.post(`${LOCAL_API}/${endpoint}/${system}/${type}`);
       fetchAutomation();
     } catch (err) {
-      console.error(`Failed to toggle ${system}`, err);
-      alert(`Erro ao ${isRunning ? 'parar' : 'iniciar'} ${system}. Verifique se a Local API está rodando.`);
+      console.error(`Failed to toggle ${system} ${type}`, err);
+      alert(`Erro ao ${isRunning ? 'parar' : 'iniciar'} ${system} ${type}.`);
     }
   };
 
@@ -516,88 +539,142 @@ function App() {
 
         {activeTab === 'automation' && (
           <div className="automation-content animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* Bloco de Gerenciamento de Lista (Discovery) */}
+            <div className="glass-panel" style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '16px', color: 'var(--success-color)' }}>
+                  <FileText size={32} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>Lista de Séries (Discovery)</h2>
+                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Cole os nomes das séries aqui (um por linha) para os robôs procurarem automaticamente.</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <textarea 
+                  value={globalList}
+                  onChange={(e) => setGlobalList(e.target.value)}
+                  placeholder="Exemplo:
+KinnPorsche
+Cutie Pie
+..."
+                  style={{ width: '100%', height: '150px', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#0f172a', color: '#cbd5e1', fontFamily: 'monospace', resize: 'vertical' }}
+                />
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <button 
+                    className="primary-btn"
+                    onClick={saveGlobalList}
+                    disabled={isSavingList}
+                    style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--success-color)' }}
+                  >
+                    {isSavingList ? <Loader className="spin" size={18} /> : <Save size={18} />}
+                    Salvar Sincronizado
+                  </button>
+                  {listMessage && <span style={{ color: listMessage.includes('Erro') ? 'var(--danger-color)' : 'var(--success-color)' }}>{listMessage}</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Bloco de Controle dos Scrapers */}
             <div className="glass-panel" style={{ padding: '32px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
                 <div style={{ padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '16px', color: '#38bdf8' }}>
                   <Cpu size={32} />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>Controle de Scrapers</h2>
-                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Gerencie os robôs de download locais (iQIYI e Gagaoolala).</p>
+                  <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>Controle de Robôs Automáticos</h2>
+                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Gerencie as operações de Discovery (Busca) e Download (Scraper).</p>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                 {/* iQIYI Card */}
                 <div style={{ background: 'rgba(255,255,255,0.02)', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.25rem' }}>iQIYI System</h3>
-                    <span style={{ 
-                      padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 600,
-                      background: automationStatus.iqiyi.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)',
-                      color: automationStatus.iqiyi.running ? 'var(--success-color)' : 'var(--text-secondary)'
-                    }}>
-                      {automationStatus.iqiyi.running ? 'Rodando' : 'Parado'}
-                    </span>
-                  </div>
+                  <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>iQIYI System</h3>
                   
-                  <div style={{ flex: 1, background: '#0f172a', borderRadius: '8px', padding: '12px', border: '1px solid #1e293b', marginBottom: '16px', height: '200px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', display: 'flex', flexDirection: 'column-reverse' }}>
-                    <div>
-                      {automationStatus.iqiyi.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs disponíveis...</span> :
-                        automationStatus.iqiyi.logs.map((log: string, i: number) => (
-                          <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1', marginBottom: '4px', wordBreak: 'break-all' }}>{log}</div>
-                        ))
-                      }
+                  {/* iQIYI Discovery */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ color: '#cbd5e1' }}>1. Motor de Descoberta (Busca)</strong>
+                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '8px', background: automationStatus.iqiyi.discovery.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)', color: automationStatus.iqiyi.discovery.running ? 'var(--success-color)' : 'var(--text-secondary)' }}>
+                        {automationStatus.iqiyi.discovery.running ? 'Buscando...' : 'Parado'}
+                      </span>
                     </div>
+                    <div style={{ background: '#0f172a', borderRadius: '8px', padding: '8px', border: '1px solid #1e293b', height: '120px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '11px', display: 'flex', flexDirection: 'column-reverse', marginBottom: '8px' }}>
+                      <div>
+                        {automationStatus.iqiyi.discovery.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs...</span> :
+                          automationStatus.iqiyi.discovery.logs.map((log: string, i: number) => <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1' }}>{log}</div>)}
+                      </div>
+                    </div>
+                    <button onClick={() => toggleAutomation('iqiyi', 'discovery', automationStatus.iqiyi.discovery.running)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', background: automationStatus.iqiyi.discovery.running ? 'var(--danger-color)' : 'var(--accent-color)', color: '#fff' }}>
+                      {automationStatus.iqiyi.discovery.running ? 'Parar Discovery' : 'Iniciar Discovery iQIYI'}
+                    </button>
                   </div>
 
-                  <button 
-                    onClick={() => toggleAutomation('iqiyi', automationStatus.iqiyi.running)}
-                    style={{
-                      padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                      background: automationStatus.iqiyi.running ? 'var(--danger-color)' : 'var(--success-color)',
-                      color: '#fff', transition: 'all 0.2s'
-                    }}
-                  >
-                    {automationStatus.iqiyi.running ? <><Square size={18} /> Parar Scraper</> : <><Play size={18} /> Iniciar Scraper</>}
-                  </button>
+                  {/* iQIYI Scraper */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ color: '#cbd5e1' }}>2. Motor de Download (Scraper)</strong>
+                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '8px', background: automationStatus.iqiyi.scraper.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)', color: automationStatus.iqiyi.scraper.running ? 'var(--success-color)' : 'var(--text-secondary)' }}>
+                        {automationStatus.iqiyi.scraper.running ? 'Baixando...' : 'Parado'}
+                      </span>
+                    </div>
+                    <div style={{ background: '#0f172a', borderRadius: '8px', padding: '8px', border: '1px solid #1e293b', height: '120px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '11px', display: 'flex', flexDirection: 'column-reverse', marginBottom: '8px' }}>
+                      <div>
+                        {automationStatus.iqiyi.scraper.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs...</span> :
+                          automationStatus.iqiyi.scraper.logs.map((log: string, i: number) => <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1' }}>{log}</div>)}
+                      </div>
+                    </div>
+                    <button onClick={() => toggleAutomation('iqiyi', 'scraper', automationStatus.iqiyi.scraper.running)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', background: automationStatus.iqiyi.scraper.running ? 'var(--danger-color)' : 'var(--success-color)', color: '#fff' }}>
+                      {automationStatus.iqiyi.scraper.running ? 'Parar Scraper' : 'Iniciar Scraper iQIYI'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Gagaoolala Card */}
                 <div style={{ background: 'rgba(255,255,255,0.02)', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Gagaoolala System</h3>
-                    <span style={{ 
-                      padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 600,
-                      background: automationStatus.gagaoolala.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)',
-                      color: automationStatus.gagaoolala.running ? 'var(--success-color)' : 'var(--text-secondary)'
-                    }}>
-                      {automationStatus.gagaoolala.running ? 'Rodando' : 'Parado'}
-                    </span>
-                  </div>
+                  <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Gagaoolala System</h3>
                   
-                  <div style={{ flex: 1, background: '#0f172a', borderRadius: '8px', padding: '12px', border: '1px solid #1e293b', marginBottom: '16px', height: '200px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', display: 'flex', flexDirection: 'column-reverse' }}>
-                    <div>
-                      {automationStatus.gagaoolala.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs disponíveis...</span> :
-                        automationStatus.gagaoolala.logs.map((log: string, i: number) => (
-                          <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1', marginBottom: '4px', wordBreak: 'break-all' }}>{log}</div>
-                        ))
-                      }
+                  {/* Gagaoolala Discovery */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ color: '#cbd5e1' }}>1. Motor de Descoberta (Busca)</strong>
+                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '8px', background: automationStatus.gagaoolala.discovery.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)', color: automationStatus.gagaoolala.discovery.running ? 'var(--success-color)' : 'var(--text-secondary)' }}>
+                        {automationStatus.gagaoolala.discovery.running ? 'Buscando...' : 'Parado'}
+                      </span>
                     </div>
+                    <div style={{ background: '#0f172a', borderRadius: '8px', padding: '8px', border: '1px solid #1e293b', height: '120px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '11px', display: 'flex', flexDirection: 'column-reverse', marginBottom: '8px' }}>
+                      <div>
+                        {automationStatus.gagaoolala.discovery.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs...</span> :
+                          automationStatus.gagaoolala.discovery.logs.map((log: string, i: number) => <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1' }}>{log}</div>)}
+                      </div>
+                    </div>
+                    <button onClick={() => toggleAutomation('gagaoolala', 'discovery', automationStatus.gagaoolala.discovery.running)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', background: automationStatus.gagaoolala.discovery.running ? 'var(--danger-color)' : 'var(--accent-color)', color: '#fff' }}>
+                      {automationStatus.gagaoolala.discovery.running ? 'Parar Discovery' : 'Iniciar Discovery Gagaoolala'}
+                    </button>
                   </div>
 
-                  <button 
-                    onClick={() => toggleAutomation('gagaoolala', automationStatus.gagaoolala.running)}
-                    style={{
-                      padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                      background: automationStatus.gagaoolala.running ? 'var(--danger-color)' : 'var(--success-color)',
-                      color: '#fff', transition: 'all 0.2s'
-                    }}
-                  >
-                    {automationStatus.gagaoolala.running ? <><Square size={18} /> Parar Scraper</> : <><Play size={18} /> Iniciar Scraper</>}
-                  </button>
+                  {/* Gagaoolala Scraper */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ color: '#cbd5e1' }}>2. Motor de Download (Scraper)</strong>
+                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '8px', background: automationStatus.gagaoolala.scraper.running ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.1)', color: automationStatus.gagaoolala.scraper.running ? 'var(--success-color)' : 'var(--text-secondary)' }}>
+                        {automationStatus.gagaoolala.scraper.running ? 'Baixando...' : 'Parado'}
+                      </span>
+                    </div>
+                    <div style={{ background: '#0f172a', borderRadius: '8px', padding: '8px', border: '1px solid #1e293b', height: '120px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '11px', display: 'flex', flexDirection: 'column-reverse', marginBottom: '8px' }}>
+                      <div>
+                        {automationStatus.gagaoolala.scraper.logs.length === 0 ? <span style={{ color: 'var(--text-secondary)' }}>Sem logs...</span> :
+                          automationStatus.gagaoolala.scraper.logs.map((log: string, i: number) => <div key={i} style={{ color: log.includes('ERROR') ? '#f43f5e' : log.includes('INFO') ? '#38bdf8' : '#cbd5e1' }}>{log}</div>)}
+                      </div>
+                    </div>
+                    <button onClick={() => toggleAutomation('gagaoolala', 'scraper', automationStatus.gagaoolala.scraper.running)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', background: automationStatus.gagaoolala.scraper.running ? 'var(--danger-color)' : 'var(--success-color)', color: '#fff' }}>
+                      {automationStatus.gagaoolala.scraper.running ? 'Parar Scraper' : 'Iniciar Scraper Gagaoolala'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
